@@ -13,10 +13,10 @@
 # install.packages('rhandsontable')
 
 library(shiny)
+library(tableHTML)
 source("plotfunction.R")
 library(rhandsontable)
-
-# create empty dataframe placeholder for infomat to show before the file upload 
+htmlOutput("summary")
 empty_dat = matrix(nrow = 1,ncol = 5)
 colnames(empty_dat) = c("Profile","FTE","MVT","Pattr","RT")
 
@@ -52,11 +52,14 @@ ui <- fluidPage(
         tabPanel("Plot", 
                  tableOutput("plottable"),
                  plotOutput("binplot")),
+        
         tabPanel("whatif",
+          
                  sliderInput('attrslider', label = "Range of attrition rates" ,min = 0.01, max = 0.3, value = c(0.05,0.1), step = 0.01),
                  actionButton("go_df", "Generate / refresh whatif table"),
-                 textOutput('tabletext'),
-                 tableOutput('whatiftable')),
+                 titlePanel(textOutput('tabletext')),
+                 tableHTML_output('whatiftable')
+               ),
         tabPanel("Info and readme",includeHTML("info.html"))
         
       )
@@ -164,7 +167,39 @@ server <- function(input, output, session) {
   
   output$tabletext <- renderText(paste('Shortage probabilities across different attrition rates for',selectedrow()$Profile))
  
-  output$whatiftable <- renderTable(whatifdf(selectedrow = selectedrow(), retiremat = livedata_retire(), attrlow = input$attrslider[1], attrhigh = input$attrslider[2]), rownames = T)
+  output$whatiftable <- render_tableHTML({
+    data = whatifdf(selectedrow = selectedrow(), retiremat = livedata_retire(), attrlow = input$attrslider[1], attrhigh = input$attrslider[2]);
+  data %>%
+      tableHTML(rownames = T)%>%
+      add_css_conditional_column(conditional = 'between',
+                                 between = c(selectedrow()$RT, 999),
+                                 css = list(c('font-weight'),
+                                            c('700')),
+                                 columns = 1:ncol(data)) %>%
+      add_css_conditional_column(conditional = 'between',
+                                 between = c(0, 999),
+                                 css = list(c('width'),
+                                            c('100px')),
+                                 columns = 1:ncol(data))
+      # add_css_conditional_column(conditional = 'between',
+      #                            between = c(0, 990),
+      #                            css = list(c('background-color'),
+      #                                       c('lightblue')),
+      #                            columns = 1:ncol(data))
+    # add_css_conditional_column(conditional = 'between',
+    #                                                       between = c(0, 5),
+    #                                                       css = list(c('background-color'),
+    #                                                                  c('#f6f6f6'))) %>% 
+    #   add_css_conditional_column(conditional = 'between',
+    #                              between = c(10, 20),
+    #                              css = list(c('background-color'),
+    #                                         c('lightblue')),
+    #                              columns = 1:ncol(data))
+   
+  })
+    
+    
+  
   
 }
 
