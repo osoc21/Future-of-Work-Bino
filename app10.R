@@ -10,22 +10,24 @@
 # - add readability features to app thing (ugh)
 
 
+# install.packages('rhandsontable')
 
 library(shiny)
 source("plotfunction.R")
 library(rhandsontable)
 
+# create empty dataframe placeholder for infomat to show before the file upload 
 empty_dat = matrix(nrow = 1,ncol = 5)
 colnames(empty_dat) = c("Profile","FTE","MVT","Pattr","RT")
 
-
+# create empty dataframe placeholder for retiremat to show before the file upload 
 empty_dat2 = matrix(nrow = 1,ncol = 10)
 colnames(empty_dat2) = c("Profile",paste0('Y',rep(0:8)))
 
 dumpthing <- list()
 
 
-
+# number of runs for the binomial stuff
 nruns = 10000
 timescale = 8
 
