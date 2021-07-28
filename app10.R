@@ -12,7 +12,7 @@
 
 
 library(shiny)
-source("binomexfunction.r")
+source("plotfunction.R")
 library(rhandsontable)
 
 empty_dat = matrix(nrow = 1,ncol = 5)
@@ -22,33 +22,41 @@ colnames(empty_dat) = c("Profile","FTE","MVT","Pattr","RT")
 empty_dat2 = matrix(nrow = 1,ncol = 10)
 colnames(empty_dat2) = c("Profile",paste0('Y',rep(0:8)))
 
-dump <- list()
+dumpthing <- list()
 
 
 
-nruns = 1000
+nruns = 10000
 timescale = 8
 
 ui <- fluidPage(
-  titlePanel("Temporary title is temporary"),
+  titlePanel("Stochastic forecast of likely shortage scenarios"),
   
   sidebarLayout(
+    sidebarPanel(
       
-      fileInput("file1", NULL, accept = c(".csv")),
-      fileInput("file2", NULL, accept = c('.csv')),
+      
+      fileInput("file1", "Upload infomat CSV file here", accept = c(".csv")),
       rHandsontableOutput('infomat'),
+      fileInput("file2", "Upload retiremat CSV file here", accept = c('.csv')),
       rHandsontableOutput('retiremat'),
-      actionButton("go", "Plot Update"),
-      numericInput("profsel", "row of profile to analyze", value = 0, min = 0, max = 0)
+      actionButton("go", "Data Update / generate plot"),
+      numericInput("profsel", "Row of profile to analyze", value = 0, min = 0, max = 0)
     ),
     
     
     mainPanel(
       tabsetPanel(
-        tabPanel("Plot", plotOutput("binplot")), 
-        tabPanel("Summary", verbatimTextOutput("summary")), 
-        tabPanel("Table", tableOutput("table")),
-        tabPanel("text3", verbatimTextOutput("text3"))
+        tabPanel("Plot", 
+                 tableOutput("plottable"),
+                 plotOutput("binplot")),
+        tabPanel("whatif",
+                 sliderInput('attrslider', label = "Range of attrition rates" ,min = 0.01, max = 0.3, value = c(0.05,0.1), step = 0.01),
+                 actionButton("go_df", "Generate / refresh whatif table"),
+                 textOutput('tabletext'),
+                 tableOutput('whatiftable')),
+        tabPanel("Info and readme",includeHTML("info.html"))
+        
       )
     )
   )
@@ -61,6 +69,7 @@ server <- function(input, output, session) {
     if (is.null(inFile))
       return(rhandsontable(empty_dat))
     raw_input = read.csv(inFile$datapath, header=T, sep = ",")
+    raw_input = raw_input[order(raw_input$Profile),]
     return(rhandsontable(raw_input))
   })
   
@@ -78,6 +87,7 @@ server <- function(input, output, session) {
     if (is.null(inFile))
       return(rhandsontable(empty_dat))
     raw_input = read.csv(inFile$datapath, header=T, sep = ",")
+    raw_input = raw_input[order(raw_input$Profile),]
     return(rhandsontable(raw_input))
   })
   
@@ -94,7 +104,7 @@ server <- function(input, output, session) {
   dumpmat <- reactive({
     for (profile in livedata_info()$Profile){
       
-      dump[[profile]] = NA
+      #dumpthing[[profile]] = NA
       nfte <- as.numeric(livedata_info()[livedata_info()$Profile==profile,'FTE'])
       MVT <- as.numeric(livedata_info()[livedata_info()$Profile==profile,'MVT'])
       attrP <- as.numeric(livedata_info()[livedata_info()$Profile==profile,'Pattr'])
@@ -104,24 +114,28 @@ server <- function(input, output, session) {
       df <- data.frame('Y0' = rep(nfte,nruns))
       df2 <- data.frame(row.names = c('ub','lb','probcross','naive'))
       df2$T0 <- c(nfte,nfte,0,nfte)
+      df3 <- data.frame('Y0' = nfte)
       
       for (y in 1:timescale){
         col <- paste0('Y',y)
         df[[col]] = NA
+        df3[[col]] = NA
         df[df[,y]-livedata_retire()[livedata_retire()$Profile==profile,col] < 1,y+1] = 0
-        df[df[,y]-livedata_retire()[livedata_retire()$Profile==profile,col] >= 1,y+1] = df[df[,y]-livedata_retire()[livedata_retire()$Profile==profile,col] >= 1,y] - livedata_retire()[livedata_retire()$Profile==profile,col] - rbinom(length(df[df[,y]-livedata_retire()[livedata_retire()$Profile==profile,col] >= 1,y]),df[df[,y]-livedata_retire()[livedata_retire()$Profile==profile,col] >= 1,y] - livedata_retire()[livedata_retire()$Profile==profile,col],attrP)
+        df[df[,y]-livedata_retire()[livedata_retire()$Profile==profile,col] >= 1,y+1] = df[df[,y]-livedata_retire()[livedata_retire()$Profile==profile,col] >= 1,y] - livedata_retire()[livedata_retire()$Profile==profile,col] - rbinom(length(df[df[,y]-livedata_retire()[livedata_retire()$Profile==profile,col] >= 1,y]),as.numeric(df[df[,y]-livedata_retire()[livedata_retire()$Profile==profile,col] >= 1,y] - livedata_retire()[livedata_retire()$Profile==profile,col]),attrP)
+        df3[,y+1] = df3[,y]*((1-attrP))-livedata_retire()[livedata_retire()$Profile==profile,col]
         colval <- c(quantile(df[[col]],c(ub,lb)),
                     sum(df[[col]] < MVT)/nruns,
-                    nfte*((1-attrP)^y))
+                    ifelse(df3[[col]]<0,0,df3[[col]]))
         df2[[col]] = colval
       }
       
       
       tdf2 <- data.frame(t(df2))
-      dump[[profile]] = tdf2
+      dumpthing[[profile]] = tdf2
       
-      dumpmat <- dump
+      
     }
+    return(dumpthing)
   })
   
   
@@ -132,10 +146,23 @@ server <- function(input, output, session) {
   
   selectedrow <- reactive(livedata_info()[input$profsel,])
   
-  output$table <- renderTable(dumpmat()[[selectedrow()$Profile]])
   
-  output$text3 <- renderPrint(dumpmat())
   
+  output$binplot <- renderPlot(
+    binplot(df = dumpmat()[[selectedrow()$Profile]], ts = timescale, nrep = nruns, selrow = selectedrow()), width = 900, height = 600
+  )
+  
+  plottable.t <- reactive({
+    df <- t(dumpmat()[[selectedrow()$Profile]])
+    rownames(df) <- c('lower bound','upper bound','probability of shortage','constant attrition')
+    return(df)
+  })
+  
+  output$plottable <- renderTable(plottable.t(),rownames=T)
+  
+  output$tabletext <- renderText(paste('Shortage probabilities across different attrition rates for',selectedrow()$Profile))
+ 
+  output$whatiftable <- renderTable(whatifdf(selectedrow = selectedrow(), retiremat = livedata_retire(), attrlow = input$attrslider[1], attrhigh = input$attrslider[2]), rownames = T)
   
 }
 
