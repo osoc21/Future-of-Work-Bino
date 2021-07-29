@@ -1,5 +1,8 @@
 binplot <- function(df, ts, nrep, selrow){
   
+  par(mar = c(5.1, 4.2, 4.1, 2.1))
+  
+  
   tdf2 <- df
   MVT <- selrow$MVT
   jobtitle <- selrow$Profile

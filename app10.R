@@ -75,7 +75,7 @@ server <- function(input, output, session) {
       return(rhandsontable(empty_dat))
     raw_input = read.csv(inFile$datapath, header=T, sep = ",")
     raw_input = raw_input[order(raw_input$Profile),]
-    return(rhandsontable(raw_input))
+    return(rhandsontable(raw_input, rowHeaders = NULL))
   })
   
   output$infomat <- renderRHandsontable({
@@ -93,7 +93,7 @@ server <- function(input, output, session) {
       return(rhandsontable(empty_dat))
     raw_input = read.csv(inFile$datapath, header=T, sep = ",")
     raw_input = raw_input[order(raw_input$Profile),]
-    return(rhandsontable(raw_input))
+    return(rhandsontable(raw_input, rowHeaders = NULL))
   })
   
   output$retiremat <- renderRHandsontable({
